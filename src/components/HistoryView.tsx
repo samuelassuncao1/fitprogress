@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Dumbbell } from 'lucide-react';
-import { getWorkoutHistory } from '../lib/workouts';
 
 interface HistoryViewProps {
   userId: string;
@@ -23,11 +22,13 @@ export default function HistoryView({ userId }: HistoryViewProps) {
     loadHistory();
   }, [userId]);
 
-  const loadHistory = async () => {
+  const loadHistory = () => {
     try {
       setLoading(true);
-      const data = await getWorkoutHistory(userId);
-      setHistory(data as HistoryItem[]);
+      const data = JSON.parse(
+        localStorage.getItem('fitprogress_history') || '[]'
+      );
+      setHistory(data);
     } catch (error) {
       console.error('Error loading history:', error);
     } finally {

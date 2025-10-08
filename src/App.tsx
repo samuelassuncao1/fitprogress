@@ -1,26 +1,54 @@
 import { useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
-import { Dumbbell, BarChart3, History, LogOut, User } from 'lucide-react';
-import AuthScreen from './components/AuthScreen';
+import { Dumbbell, BarChart3, History } from 'lucide-react';
 import WorkoutList from './components/WorkoutList';
 import WorkoutSession from './components/WorkoutSession';
 import ProgressView from './components/ProgressView';
 import HistoryView from './components/HistoryView';
 import EditWorkoutModal from './components/EditWorkoutModal';
 import {
-  getWorkouts,
-  createWorkoutSession,
-  saveExerciseLog,
-  completeWorkoutSession,
-  initializeDefaultWorkouts,
   type Workout,
   type ExerciseLog,
 } from './lib/workouts';
 
 type Screen = 'workouts' | 'progress' | 'history';
 
+const MOCK_USER_ID = 'local-user';
+
+const DEFAULT_WORKOUTS_DATA = {
+  A: {
+    name: 'Pernas e Ombros',
+    exercises: [
+      { name: 'Agachamento Livre', order: 0 },
+      { name: 'Leg Press 45°', order: 1 },
+      { name: 'Cadeira Extensora', order: 2 },
+      { name: 'Cadeira Flexora', order: 3 },
+      { name: 'Desenvolvimento com Halteres', order: 4 },
+      { name: 'Elevação Lateral', order: 5 },
+    ],
+  },
+  B: {
+    name: 'Peito e Tríceps',
+    exercises: [
+      { name: 'Supino Reto', order: 0 },
+      { name: 'Supino Inclinado', order: 1 },
+      { name: 'Crucifixo Inclinado', order: 2 },
+      { name: 'Tríceps Testa', order: 3 },
+      { name: 'Tríceps Corda', order: 4 },
+    ],
+  },
+  C: {
+    name: 'Costas e Bíceps',
+    exercises: [
+      { name: 'Barra Fixa', order: 0 },
+      { name: 'Remada Curvada', order: 1 },
+      { name: 'Pulldown', order: 2 },
+      { name: 'Rosca Direta', order: 3 },
+      { name: 'Rosca Alternada', order: 4 },
+    ],
+  },
+};
+
 function App() {
-  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentScreen, setCurrentScreen] = useState<Screen>('workouts');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -28,41 +56,40 @@ function App() {
   const [editingWorkout, setEditingWorkout] = useState<Workout | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    initializeUserData();
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      initializeUserData();
+  const initializeUserData = () => {
+    const stored = localStorage.getItem('fitprogress_workouts');
+    if (stored) {
+      setWorkouts(JSON.parse(stored));
+    } else {
+      const initialWorkouts: Workout[] = Object.entries(DEFAULT_WORKOUTS_DATA).map(
+        ([key, workout]) => ({
+          id: `workout-${key}`,
+          user_id: MOCK_USER_ID,
+          workout_key: key as 'A' | 'B' | 'C',
+          name: workout.name,
+          exercises: workout.exercises.map((ex, idx) => ({
+            id: `exercise-${key}-${idx}`,
+            workout_id: `workout-${key}`,
+            name: ex.name,
+            order_index: ex.order,
+            default_sets: 4,
+            default_reps: 8,
+          })),
+        })
+      );
+      setWorkouts(initialWorkouts);
+      localStorage.setItem('fitprogress_workouts', JSON.stringify(initialWorkouts));
     }
-  }, [user]);
-
-  const initializeUserData = async () => {
-    try {
-      await initializeDefaultWorkouts(user.id);
-      await loadWorkouts();
-    } catch (error) {
-      console.error('Error initializing user data:', error);
-    }
+    setLoading(false);
   };
 
-  const loadWorkouts = async () => {
-    try {
-      const data = await getWorkouts(user.id);
-      setWorkouts(data);
-    } catch (error) {
-      console.error('Error loading workouts:', error);
+  const loadWorkouts = () => {
+    const stored = localStorage.getItem('fitprogress_workouts');
+    if (stored) {
+      setWorkouts(JSON.parse(stored));
     }
   };
 
@@ -70,22 +97,45 @@ function App() {
     setActiveWorkout(workout);
   };
 
-  const handleCompleteWorkout = async (logs: ExerciseLog[]) => {
+  const handleCompleteWorkout = (logs: ExerciseLog[]) => {
     if (!activeWorkout) return;
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const sessionId = await createWorkoutSession(
-        user.id,
-        activeWorkout.id,
-        today
+      const sessionId = `session-${Date.now()}`;
+
+      const history = JSON.parse(
+        localStorage.getItem('fitprogress_history') || '[]'
       );
 
-      for (const log of logs) {
-        await saveExerciseLog({ ...log, session_id: sessionId });
-      }
+      const progressData = JSON.parse(
+        localStorage.getItem('fitprogress_progress') || '{}'
+      );
 
-      await completeWorkoutSession(sessionId);
+      history.push({
+        id: sessionId,
+        workout_id: activeWorkout.id,
+        workout_date: today,
+        completed: true,
+        workouts: {
+          name: activeWorkout.name,
+          workout_key: activeWorkout.workout_key,
+        },
+      });
+
+      logs.forEach((log) => {
+        if (!progressData[log.exercise_id]) {
+          progressData[log.exercise_id] = [];
+        }
+        progressData[log.exercise_id].push({
+          ...log,
+          session_id: sessionId,
+          workout_date: today,
+        });
+      });
+
+      localStorage.setItem('fitprogress_history', JSON.stringify(history));
+      localStorage.setItem('fitprogress_progress', JSON.stringify(progressData));
 
       setActiveWorkout(null);
       alert('Treino finalizado com sucesso!');
@@ -93,10 +143,6 @@ function App() {
       console.error('Error completing workout:', error);
       alert('Erro ao finalizar treino');
     }
-  };
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
   };
 
   if (loading) {
@@ -108,10 +154,6 @@ function App() {
         </div>
       </div>
     );
-  }
-
-  if (!user) {
-    return <AuthScreen />;
   }
 
   if (activeWorkout) {
@@ -127,21 +169,10 @@ function App() {
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <header className="bg-blue-600 text-white p-4 sticky top-0 z-10 shadow-lg">
-        <div className="flex items-center justify-between max-w-2xl mx-auto">
+        <div className="flex items-center justify-center max-w-2xl mx-auto">
           <div className="flex items-center gap-3">
             <Dumbbell className="w-8 h-8" />
             <h1 className="text-2xl font-bold">FitProgress</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-700 rounded-full p-2">
-              <User className="w-5 h-5" />
-            </div>
-            <button
-              onClick={handleSignOut}
-              className="p-2 hover:bg-blue-700 rounded-lg transition"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
           </div>
         </div>
       </header>
@@ -155,9 +186,9 @@ function App() {
           />
         )}
         {currentScreen === 'progress' && (
-          <ProgressView workouts={workouts} userId={user.id} />
+          <ProgressView workouts={workouts} userId={MOCK_USER_ID} />
         )}
-        {currentScreen === 'history' && <HistoryView userId={user.id} />}
+        {currentScreen === 'history' && <HistoryView userId={MOCK_USER_ID} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-lg">

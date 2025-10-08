@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { TrendingUp, Calendar, Clock, Award } from 'lucide-react';
 import type { Workout } from '../lib/workouts';
-import { getExerciseProgress, getWorkoutHistory } from '../lib/workouts';
 
 interface ProgressViewProps {
   workouts: Workout[];
@@ -32,15 +31,18 @@ export default function ProgressView({ workouts, userId }: ProgressViewProps) {
     loadProgressData();
   }, [userId, workouts]);
 
-  const loadProgressData = async () => {
+  const loadProgressData = () => {
     try {
       setLoading(true);
 
-      const history = await getWorkoutHistory(userId, 100);
+      const history = JSON.parse(
+        localStorage.getItem('fitprogress_history') || '[]'
+      );
+
       const thisMonth = new Date();
       thisMonth.setDate(1);
       const thisMonthCount = history.filter(
-        (session) => new Date(session.workout_date) >= thisMonth
+        (session: any) => new Date(session.workout_date) >= thisMonth
       ).length;
 
       setStats({
@@ -51,19 +53,22 @@ export default function ProgressView({ workouts, userId }: ProgressViewProps) {
       });
 
       const allExercises: ExerciseProgressData[] = [];
+      const progressData = JSON.parse(
+        localStorage.getItem('fitprogress_progress') || '{}'
+      );
 
       for (const workout of workouts) {
         if (!workout.exercises) continue;
 
         for (const exercise of workout.exercises) {
-          const logs = await getExerciseProgress(userId, exercise.id);
+          const logs = progressData[exercise.id] || [];
 
           if (logs.length === 0) continue;
 
-          const weights = logs.map((log) => log.weight);
+          const weights = logs.map((log: any) => log.weight);
           const maxWeight = Math.max(...weights);
           const avgWeight =
-            weights.reduce((a, b) => a + b, 0) / weights.length;
+            weights.reduce((a: number, b: number) => a + b, 0) / weights.length;
 
           allExercises.push({
             exercise_id: exercise.id,
@@ -71,7 +76,7 @@ export default function ProgressView({ workouts, userId }: ProgressViewProps) {
             maxWeight,
             avgWeight,
             totalSets: logs.length,
-            lastWorkoutDate: logs[0]?.workout_sessions?.workout_date || '',
+            lastWorkoutDate: logs[0]?.workout_date || '',
           });
         }
       }

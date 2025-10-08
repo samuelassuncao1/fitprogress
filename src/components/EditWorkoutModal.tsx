@@ -1,12 +1,6 @@
 import { useState } from 'react';
 import { X, Plus, Trash2, GripVertical } from 'lucide-react';
 import type { Workout, Exercise } from '../lib/workouts';
-import {
-  updateWorkout,
-  updateExercise,
-  addExercise,
-  deleteExercise,
-} from '../lib/workouts';
 
 interface EditWorkoutModalProps {
   workout: Workout;
@@ -51,41 +45,32 @@ export default function EditWorkoutModal({
     setExercises((prev) => prev.filter((ex) => ex.id !== exerciseId));
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     try {
       setSaving(true);
 
-      await updateWorkout(workout.id, workoutName);
-
-      for (const exercise of exercises) {
-        if (exercise.id.startsWith('temp-')) {
-          await addExercise(
-            workout.id,
-            exercise.name,
-            exercise.order_index
-          );
-        } else {
-          await updateExercise(exercise.id, {
-            name: exercise.name,
-            default_sets: exercise.default_sets,
-            default_reps: exercise.default_reps,
-            order_index: exercise.order_index,
-          });
-        }
-      }
-
-      const originalExerciseIds = new Set(
-        workout.exercises?.map((ex) => ex.id) || []
-      );
-      const currentExerciseIds = new Set(
-        exercises.filter((ex) => !ex.id.startsWith('temp-')).map((ex) => ex.id)
+      const workouts = JSON.parse(
+        localStorage.getItem('fitprogress_workouts') || '[]'
       );
 
-      for (const originalId of originalExerciseIds) {
-        if (!currentExerciseIds.has(originalId)) {
-          await deleteExercise(originalId);
+      const updatedWorkouts = workouts.map((w: Workout) => {
+        if (w.id === workout.id) {
+          const updatedExercises = exercises.map((ex, index) => ({
+            ...ex,
+            id: ex.id.startsWith('temp-') ? `exercise-${workout.workout_key}-${index}` : ex.id,
+            order_index: index,
+          }));
+
+          return {
+            ...w,
+            name: workoutName,
+            exercises: updatedExercises,
+          };
         }
-      }
+        return w;
+      });
+
+      localStorage.setItem('fitprogress_workouts', JSON.stringify(updatedWorkouts));
 
       onSave();
     } catch (error) {
