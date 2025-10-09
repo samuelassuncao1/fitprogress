@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Check, ArrowLeft, Save } from 'lucide-react';
+import { Check, ArrowLeft, Save, Image as ImageIcon } from 'lucide-react';
 import type { Workout, Exercise, ExerciseLog } from '../lib/workouts';
 import Timer from './Timer';
+import { getExerciseImage } from '../utils/exerciseImages';
 
 interface WorkoutSessionProps {
   workout: Workout;
@@ -127,12 +128,29 @@ export default function WorkoutSession({
 
       <div className="p-4 space-y-6">
         {exercises.map((exercise, exIndex) => (
-          <div key={exercise.id} className="bg-white rounded-xl shadow-md p-4">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">
-              {exIndex + 1}. {exercise.name}
-            </h3>
+          <div key={exercise.id} className="bg-white rounded-xl shadow-md overflow-hidden">
+            <div className="relative h-48 bg-gradient-to-br from-slate-200 to-slate-300">
+              <img
+                src={getExerciseImage(exercise.name)}
+                alt={exercise.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                  const fallback = target.nextElementSibling as HTMLElement;
+                  if (fallback) fallback.style.display = 'flex';
+                }}
+              />
+              <div className="hidden absolute inset-0 bg-gradient-to-br from-blue-500 to-blue-600 items-center justify-center">
+                <ImageIcon className="w-12 h-12 text-white opacity-50" />
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+              <h3 className="absolute bottom-4 left-4 right-4 text-xl font-bold text-white">
+                {exIndex + 1}. {exercise.name}
+              </h3>
+            </div>
 
-            <div className="space-y-3 mb-4">
+            <div className="p-4 space-y-3 mb-4">
               {exerciseData[exercise.id]?.map((set, setIndex) => (
                 <div
                   key={setIndex}
@@ -205,7 +223,9 @@ export default function WorkoutSession({
               ))}
             </div>
 
-            <Timer exerciseName={`Descanso - ${exercise.name}`} />
+            <div className="p-4 pt-0">
+              <Timer exerciseName={`Descanso - ${exercise.name}`} />
+            </div>
           </div>
         ))}
       </div>
